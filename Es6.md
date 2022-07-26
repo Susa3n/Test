@@ -123,7 +123,7 @@
     - promise.catch()对应reject失败的处理
     - promise.all()接受参数多个Promise的实例封装成的数组，返回一个新的Promise实例对象,当数组中所有的实例状态都为fulfiled的时候，才会调用实例对象执行器函数中的resolve参数，如果有一个失败就调用实例对象执行器函数的reject参数
     - promise.rece()接受参数多个Promise的实例封装成的数组，返回一个新的Promise实例对象,当数组中某个实例首先变为fulfiled状态，就会调用新的实例对象执行器函数中的resolve参数，如果都失败了调用执行函数中的reject参数
-  - 总结：Promise是一个构造函数，接收一个执行器函数作为参数。一个Promise实例有三种状态，pending、fulfilled、rejected，分别代表了初始化状态，成功和失败。状态只能从初始化状态到成功或者失败，而且状态一旦改变，就无法再改变了。状态的改变是通过调用执行器函数中参数（resolve,reject）来实现的。可以再异步操作结束后调用这两个函数改变当前promise的状态。它在原型上定义了then方法，使用这个then方法可以为两个状态的改变注册回调函数，这个回调函数是微任务，会在同步任务执行完毕后再执行
+  - 总结：Promise是一个构造函数，接收一个执行器函数作为参数。一个Promise实例有三种状态，pending、fulfilled、rejected，分别代表了初始化状态，成功和失败。状态只能从初始化状态到成功或者失败，而且状态一旦改变，就无法再改变了。状态的改变是通过调用执行器函数中参数（resolve,reject）来实现的。再将异步操作结束后结果调用这两个函数作为参数改变当前promise的状态。它在原型上定义了then方法，使用这个then方法可以为两个状态的改变注册回调函数，这个回调函数是微任务，会在同步任务执行完毕后再执行
 ```javaScript
 const PENDING = 'pending'
 const FULFILLED = 'fulfilled'
