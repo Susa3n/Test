@@ -1,9 +1,10 @@
-#### Vue响应式数据的理解
+#### Vue响应式数据的理解（双向绑定的原理）
 
 - 响应式数据：数据变化视图发生更新
-- Vue内部通过实现了 `defineReactive`方法，借用`Object.defineProperty`将已存在的属性进行数据劫持，添加`get`和`set`，当用户取值的时候做一些操作。设定值的时候会执行一些操作比如更新界面。但是也有一些缺陷，因为 `Object.defineProperty`只能对最外层数据进行劫持，对于多层对象通过递归来实现劫持
+- Vue内部通过实现了 `defineReactive`方法，借用`Object.defineProperty`将data中属性进行数据劫持，添加`get`和`set`，当用户取值的时候进行依赖收集，设定值时会进行赋值通知依赖进行更新。但是也有一些缺陷，因为 `Object.defineProperty`只能对最外层数据进行劫持，对于多层对象通过递归来实现劫持
 - 重点内容：嵌套数组中的数据如何收集渲染`watcher` 
    - 当给数组的属性名进行数据劫持时，会给数组添加一个`dep`属性，当属性名进行依赖收集时，同时数组也会进行依赖收集。同时深度递归数组进行依赖收集
+- 个人理解：Vue在初始化data数据时，会通过Observer类实例化一个observer的实例，递归遍历data中的数据，调用`defineReactive`方法，借用`object.DefineProperty`,添加get和set，当读取数据时会触发get进行依赖收集，当数据发生修改会调用set进行赋值通知依赖更新。
 ```javascript
 export function defineReactive ( 
   obj: Object,
@@ -108,10 +109,9 @@ function defineReactive(data, key, value) { // 将数据定义为响应式
 
 #### Vue如何监听数组中数据的变化
 
-- 数组考虑性能原因没有使用`defineReactive`对数组中的每一项进行拦截，而是选择重写数组中能直接更改数据七个方法（push、shift、unshift、pop、splice、sort、reverse）
+- 数组考虑性能原因没有使用`defineReactive`对数组中的每一项进行拦截，而是选择重写数组中能直接更改数据七个方法（push、shift、unshift、pop、splice、sort、reverse），当调用这7个api时，内部还是执行原来的方法，添加了通知依赖更新的操作和新增的数据如果包含引用数据类型会继续递归劫持
 - 数组中如果是引用数据类型也会进行递归劫持 添加`get`和`set`
 - 数组中的索引和长度变化是无法监控到的
-
 ```javascript
 let oldMethods = Array.prototype
 export let arrayMethods = Object.create(oldMethods) // 旧数组的原型方法
@@ -150,7 +150,15 @@ methods.forEach(method => {
 
 #### Vue中如何进行依赖收集
 
-- 在初始化`Vue`的组件时，先对组件`data`中的属性进行初始化，将属性定义为响应式数据，拥有自己的`dep`属性，存放他所依赖的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新
+- Vue在初始化时，先`data`进行初始化，通过new `Observer`类创建一个实例，之后递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方法，将属性定义为响应式数据，添加get和set方法，在这一过程中通过new `Dep`类创建dep实例，存放他所依赖的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新。
+
+
+
+#### Vue中数组如何进行依赖收集
+- 以数据`data:{arr: [1,2,[3]]}`为例
+  - 初始化时首先通过observer进行数据，创建Observer类的实例，遍历data中的属性，调用defineReactive方法借用Obeject.defineProperty方法进行数据劫持，在这一过程中的作用域创建Dep的实例和递归观测属性值，判断是对象类型继续观测，创建Observer类的实例，创建属性值的Dep实例，并且给当前属性值绑定一个属性__ob__为当前observer的实例,判断属性值是不是数组，如果是修改数组隐士原型对象的指向（此时已经重写了数组原型上能直接修改数组的方法）对数组中的数据进行递归观测。
+  - 初始化界面时，在模板中通过插值语法{{arr}},执行render函数时，会获取arr的值，走到属性get方法。判断当前是否有watcher实例，有的话进行依赖收集dep.depend，数组的属性值此时也会进行依赖收集，然后遍历属性值
+#### 执行流程
 - `Vue`的执行流程，通过`new Vue`传入配置对象，进行数据的初始化，执行`$mount`方法。模板进行`compile`，将模板通过`parse`方法转为`Ast`语法树，之后进行标记，最后生成`code`字符串`+``With(this) {}`生成`render`函数。执行`render`函数拿到一个对象，之后编译成真实的`dom`节点（这一过程中之后会使用`diff`算法），之后进行初始化渲染，在渲染的过程中界面用到的属性进行取值操作，调用`get`方法在当前上下文中拿到`dep`收集渲染`watcher`，当用户操作值得时候会调用`set`方法也是在当前上下文拿到`dep`通知对应得`watcher`进行更新。之后页面生成虚拟`dom`，将虚拟`dom`编译真实`dom`节点，挂载到页面上。
 
 #### Vue中如何理解模板编译原理
@@ -634,11 +642,11 @@ export function mergeOptions(parent, child) {
 
 #### nextTick在哪里使用？原理是？
 
-- `nextTick`中的接收一个回调是在下次`dom`更新结束之后执行的延迟回调 
+- `nextTick`中的接收一个回调函数作为参数，它的作用将回调函数延迟到下次DOM更新之后执行。将回调函数放入异步队列中。Vue会根据当前浏览器环境优先使用原生的Promise.then、mutationObserver等,刷新异步队列
    - 数据更新后可用于拿取更新后的`Dom`
    - 在`created`生命周期钩子函数中需要操作`dom`,也可以把操作写在`nextTick`的回调中
-- `Vue`中检测到数据变化并不会直接更新Dom，而是开启一个任务队列，去更新dom。
-- 原理是：`Vue` 的 `nextTick` 其本质是对 `JavaScript` 执行原理 `EventLoop` 的一种应用，将传入的回调函数包装成微任务加入到Vue异步队列中，保证在异步更新DOM的watcher后面。
+- `Vue`中检测到数据变化并不会直接更新Dom，而是开启一个任务队列，将所有要更新watcher的实例放到队列中，重复的watcher只会放进去一次，然后在下一事件循环中，刷新任务队列执行渲染
+- 原理是：`Vue` 的 `nextTick` 其本质是对 `JavaScript` 执行原理 `EventLoop` 的一种应用，将传入的回调函数包装成微任务加入到Vue异步队列中，保证在异步更新DOM的watcher后面执行。
 
 ```javascript
 let callbacks = []
@@ -826,10 +834,6 @@ export function set(
 1. 路由懒加载
 1. cdn引入公共库
 1. GZIP压缩
-#### 函数式组件的优势和原理
-
-- 函数式组件的特性：无状态、无生命周期、无this。但是性能高  正常组件是一个类继承了`Vue`，函数式组件就是普通函数，没有`new`的过程，也没有`init``prepatch`
-- 接受配置对象`functional`为`true`，还有`render`属性值是一个函数默认接受参数`h`和`context`上下文。`h`用来生成真实`dom`，`context`里边一些参数`props``children``parent`...
 #### .use的实现原理
 
 - `Vue.use`方法是用来使用插件的，我们可以在插件中扩展全局的组件，指令，原型上的方法，
@@ -998,7 +1002,7 @@ Vue实例有一个完整生命周期，也就是从开始创建、初始化数�
 
 #### 虚拟dom的理解
 
-- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。会使用新创建的虚拟节点和将上一次渲染时缓存的虚拟节点进行对比，然后根据diff算法比对差异只更新需要更新的真实DOM节点，从而避免不必要的 DOM 操作，节省一定的性能。
+- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。数据发生变化页面更新会使用新创建的虚拟节点和将上一次渲染时缓存的虚拟节点进行对比，然后根据diff算法比对差异只更新需要更新的真实DOM节点，从而避免不必要的 DOM 操作，节省一定的性能。
 - 虚拟dom不依赖平台的真实环境实现跨平台
 
 #### Vue为什么需要虚拟dom
