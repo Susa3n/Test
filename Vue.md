@@ -150,7 +150,7 @@ methods.forEach(method => {
 
 #### Vue中如何进行依赖收集
 
-- Vue在初始化时，先`data`进行初始化，通过new `Observer`类创建一个实例，之后递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方法，将属性定义为响应式数据，添加get和set方法，在这一过程中通过new `Dep`类创建dep实例，存放他所依赖的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新。
+- Vue在初始化时，先对`data`中属性进行初始化，递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方法，将属性定义为响应式数据，添加get和set方法，在这一过程中通过new `Dep`类创建dep实例，存放他所依赖的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新。
 
 
 
@@ -645,7 +645,6 @@ export function mergeOptions(parent, child) {
 - `nextTick`中的接收一个回调函数作为参数，它的作用将回调函数延迟到下次DOM更新之后执行。将回调函数放入异步队列中。Vue会根据当前浏览器环境优先使用原生的Promise.then、mutationObserver等,刷新异步队列
    - 数据更新后可用于拿取更新后的`Dom`
    - 在`created`生命周期钩子函数中需要操作`dom`,也可以把操作写在`nextTick`的回调中
-- `Vue`中检测到数据变化并不会直接更新Dom，而是开启一个任务队列，将所有要更新watcher的实例放到队列中，重复的watcher只会放进去一次，然后在下一事件循环中，刷新任务队列执行渲染
 - 原理是：`Vue` 的 `nextTick` 其本质是对 `JavaScript` 执行原理 `EventLoop` 的一种应用，将传入的回调函数包装成微任务加入到Vue异步队列中，保证在异步更新DOM的watcher后面执行。
 
 ```javascript
@@ -1002,7 +1001,7 @@ Vue实例有一个完整生命周期，也就是从开始创建、初始化数�
 
 #### 虚拟dom的理解
 
-- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。数据发生变化页面更新会使用新创建的虚拟节点和将上一次渲染时缓存的虚拟节点进行对比，然后根据diff算法比对差异只更新需要更新的真实DOM节点，从而避免不必要的 DOM 操作，节省一定的性能。
+- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。数据发生变化,页面更新时会使用新创建的虚拟dom和将上一次渲染时缓存的虚拟dom进行对比，然后根据diff算法比对差异只更新需要更新的真实DOM节点，从而避免不必要的 DOM 操作，节省一定的性能。
 - 虚拟dom不依赖平台的真实环境实现跨平台
 
 #### Vue为什么需要虚拟dom
