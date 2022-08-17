@@ -259,7 +259,7 @@ class Promise {
     })
   }
 
-  static all(PromiseList) {
+  all = (PromiseList) => {
     return new Promise((resolve, reject) => {
       let result = []
       let id = 0
@@ -289,7 +289,7 @@ class Promise {
   }
 
 
-  static race(PromiseList) {
+ race = (PromiseList) => {
     return new Promise((resolve,reject) => {
       PromiseList.forEach((p,i) => {
         if(p instanceof Promise) {
@@ -314,8 +314,8 @@ class Promise {
 
 ####  Es6导入导出和CommonJS
 - CommonJS模块输出的值的拷贝，ES6模块输出的值的引用
-  - CommonJS输出的值的拷贝，第一次加载模块时会缓存该模块，并且加载该模块时，即使改变输入的值，也不会对原模块内部的变量造成影响
-  - ES6模块输出的值的引用，引入该模块修改输入的变量时，会对原模块内部的变量有影响。
+  - CommonJS第一次加载模块时会缓存该模块，即使改变输入的值，也不会对原模块内部的变量造成影响
+  - ES6引入该模块修改输入的变量时，会对原模块内部的变量有影响。
 - CommonJS模块是运行时加载，只有执行到require时才会加载该模块，而import引入ES6模块是在编译阶段执行，在代码执行之前就已经拿到输入的变量
 - CommonJS模块的require是同步在家模块，Es6模块的import命令是异步加载，有一个独立的模块依赖的解析阶段
 - ES6动态加载 import('path')，参数接收一个路径，返回的是一个promise的实例，可以通过.then拿到引入的模块的值
@@ -346,3 +346,9 @@ if (condition) {
 import(f())
 .then(...);
 ```
+ - commonJS输出得值得拷贝 es6输出得值得引用
+   - commonJS第一次加载模块时，会对模块进行缓存，即使改变输入得值，也不会对原模块内部造成造成影响
+   - es6引入该模块改变输入得值，会对模块内部造成影响
+ - c是运行时加载，只有执行到require时才会加载该模块
+ - 而es6中得import，是在编译阶段执行得，也就是说在执行代码之前已经拿到输入得值
+ - c得reuqire是同步加载模块，es6模块得import命令异步加载，有一个独立得模块进行解析

@@ -1,8 +1,7 @@
-#### Vue响应式数据的理解（双向绑定的原理）
+#### Vue响应式数据的理解
 
 - 响应式数据：数据变化视图发生更新
-- Vue内部通过实现了 `defineReactive`方法，借用`Object.defineProperty`将data中属性进行数据劫持，添加`get`和`set`，当用户取值的时候进行依赖收集，设定值时会进行赋值通知依赖进行更新。但是也有一些缺陷，因为 `Object.defineProperty`只能对最外层数据进行劫持，对于多层对象通过递归来实现劫持
-- 重点内容：嵌套数组中的数据如何收集渲染`watcher` 
+- Vue内部通过实现了 `defineReactive`方法，借用`Object.defineProperty`将data中属性进行数据劫持，添加`get`和`set`，当用户取值的时候进行依赖收集，设定值时会进行赋值通知依赖进行更新。但是也有一些缺陷，因为 `Object.defineProperty`只能对最外层数据进行劫持，对于多层对象通过递归来实现劫持。
    - 当给数组的属性名进行数据劫持时，会给数组添加一个`dep`属性，当属性名进行依赖收集时，同时数组也会进行依赖收集。同时深度递归数组进行依赖收集
 - 个人理解：Vue在初始化data数据时，会通过Observer类实例化一个observer的实例，递归遍历data中的数据，调用`defineReactive`方法，借用`object.DefineProperty`,添加get和set，当读取数据时会触发get进行依赖收集，当数据发生修改会调用set进行赋值通知依赖更新。
 ```javascript
@@ -106,10 +105,15 @@ function defineReactive(data, key, value) { // 将数据定义为响应式
   })
 }
 ```
+#### 双向绑定的原理
+Vue实例在初始化时，先对`data`中属性进行初始化，递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方进行数据劫持，添加get和set方法，在属性被访问和修改时执行对应操作，之后初始化页面，渲染组件的实例，每个组件实例都对应着watcher实例，在组件渲染的过程中把用到的属性进行依赖收集，之后当属性发生变化进行依赖更新，会通知watcher重新计算，从而使属性和页面进行双向绑定 
 
+#### Obeject.defineProperty()数据劫持缺陷
+- 该方法只能监听到属性的修改，监听不到属性的新增或删除。对于数组而言，无法通过下标修改数据，页面触发更新，更精确的来说对数组大部分操作都拦截不到，Vue内部重写了数组的7个方法，在这一过程中手动进行依赖更新
+- Vue2中需要数据添加或删除时，使用Vue.set、Vue.delete进行操作
 #### Vue如何监听数组中数据的变化
 
-- 数组考虑性能原因没有使用`defineReactive`对数组中的每一项进行拦截，而是选择重写数组中能直接更改数据七个方法（push、shift、unshift、pop、splice、sort、reverse），当调用这7个api时，内部还是执行原来的方法，添加了通知依赖更新的操作和新增的数据如果包含引用数据类型会继续递归劫持
+- 数组考虑性能原因没有使用`defineReactive`对数组中的每一项进行拦截，而是选择重写数组中能直接更改数据七个方法（push、shift、unshift、pop、splice、sort、reverse），当调用这7个api时，内部还是执行原来的方法，添加了通知依赖更新的操作，新增的数据如果包含引用数据类型会继续递归劫持
 - 数组中如果是引用数据类型也会进行递归劫持 添加`get`和`set`
 - 数组中的索引和长度变化是无法监控到的
 ```javascript
@@ -149,26 +153,25 @@ methods.forEach(method => {
 ```
 
 #### Vue中如何进行依赖收集
-
-- Vue在初始化时，先对`data`中属性进行初始化，递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方法，将属性定义为响应式数据，添加get和set方法，在这一过程中通过new `Dep`类创建dep实例，存放他所依赖的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新。
+- Vue实例在初始化时，先对`data`中属性进行初始化，递归遍历data中的数据，调用`defineReactive`方法，借用`Obeject.defineProperty`方法进行数据劫持，添加get和set方法，在这一过程中通过new `Dep`类创建dep实例，存放他所关联的`watcher`,之后初始化界面，会调用`render`函数，此时在`render`函数用到的属性会触发属性的依赖收集`dep.depend`，当属性发生修改`dep.notify`通知收集的`watcher`进行更新。
 
 
 
 #### Vue中数组如何进行依赖收集
 - 以数据`data:{arr: [1,2,[3]]}`为例
   - 初始化时首先通过observer进行数据，创建Observer类的实例，遍历data中的属性，调用defineReactive方法借用Obeject.defineProperty方法进行数据劫持，在这一过程中的作用域创建Dep的实例和递归观测属性值，判断是对象类型继续观测，创建Observer类的实例，创建属性值的Dep实例，并且给当前属性值绑定一个属性__ob__为当前observer的实例,判断属性值是不是数组，如果是修改数组隐士原型对象的指向（此时已经重写了数组原型上能直接修改数组的方法）对数组中的数据进行递归观测。
-  - 初始化界面时，在模板中通过插值语法{{arr}},执行render函数时，会获取arr的值，走到属性get方法。判断当前是否有watcher实例，有的话进行依赖收集dep.depend，数组的属性值此时也会进行依赖收集，然后遍历属性值
-#### 执行流程
+  - 初始化界面时，在模板中通过插值语法{{arr}},执行render函数时，会获取arr的值，走到属性get方法。判断当前是否有watcher实例，有的话进行依赖收集dep.depend，数组的属性值此时也会进行依赖收集，然后遍历数组继续进行依赖收集
+#### 执行流程 ||||
 - `Vue`的执行流程，通过`new Vue`传入配置对象，进行数据的初始化，执行`$mount`方法。模板进行`compile`，将模板通过`parse`方法转为`Ast`语法树，之后进行标记，最后生成`code`字符串`+``With(this) {}`生成`render`函数。执行`render`函数拿到一个对象，之后编译成真实的`dom`节点（这一过程中之后会使用`diff`算法），之后进行初始化渲染，在渲染的过程中界面用到的属性进行取值操作，调用`get`方法在当前上下文中拿到`dep`收集渲染`watcher`，当用户操作值得时候会调用`set`方法也是在当前上下文拿到`dep`通知对应得`watcher`进行更新。之后页面生成虚拟`dom`，将虚拟`dom`编译真实`dom`节点，挂载到页面上。
 
 #### Vue中如何理解模板编译原理
 
 问题核心：如何将`template`转换为`render`函数？
-`vue`中的模板`template`无法被浏览器解析并渲染，因为不属于浏览器的标准，不是正确的`HTML`语法，所以需要将`template`转化为一个函数，这样浏览器可以执行这个函数并渲染对应的`html`元素，让界面跑起来，这一个转化的过程，就成为模板编译。分为三步 `template`通过`parseHtml`转为`Ast`语法树，第二步：做优化`optimize`，之后递归遍历ast语法树拼接`code`字符串`genrat`
+`vue`中的模板`template`无法被浏览器解析并渲染，因为不属于浏览器的标准，不是正确的`HTML`语法，所以需要将`template`转化为一个函数，这样浏览器可以执行这个函数，拿到函数返回的结果渲染对应的`html`元素，这一个转化的过程，就是模板编译。
 
 1. 将`template`模板通过正则的匹配递归生成`ast`语法树- `parseHtml` ，当解析到开始标签、闭合标签、文本的时候都会分别执行对应的 回调函数，来达到构造AST树的目的
-1. 对静态语法做静态标记 - `optimize`为后续更新渲染做优化，深度遍历AST，查看每个子树的节点元素是否为静态节点或者静态节点根。如果为静态节点，他们生成的DOM永远不会改变，这对运行时模板更新起到了极大的优化作用
-1. 重新生成代码 - `genrate``new Function(`with(this){ return ${code}}`)`
+2. 对静态语法做静态标记 - `optimize`为后续更新渲染做优化，深度遍历AST，查看每个子树的节点元素是否为静态节点或者静态节点根。如果为静态节点，他们生成的DOM永远不会改变，这对运行时模板更新起到了极大的优化作用
+3. 重新生成代码 - `genrate``new Function(`with(this){ return ${code}}`)`
 
 ```javascript
 export function compileToFunction(template) {
@@ -360,7 +363,7 @@ let children = geneChildren(root) // 转化当前传入的root.children
 }generate
 ```
 
-- keep-alive是Vue提供的一个内置组件，当组件切换时不会对当前组件进行卸载。有两个常用的属性include、exclude允许组件有条件的缓存
+- keep-alive是Vue提供的一个内置组件，当组件切换时当前组件不会被卸载。有两个常用的属性include、exclude允许组件有条件的缓存
 - 生命周期？ 
    - 如果一个组件被keep-alive包裹，那么会多出两个生命周期：deactived、actived。同时beforeDestory和destoryed就不会再被触发了，因为组件不会真正销毁
 
@@ -369,7 +372,7 @@ let children = geneChildren(root) // 转化当前传入的root.children
 - MVVM 分为 Model、View、ViewModel： 
    - Model代表数据模型，数据和业务逻辑都在Model层中定义；
    - View代表UI视图，负责数据的展示；
-   - ViewModel负责监听Model中数据的改变并且控制视图的更新，处理用户交互操作；
+   - ViewModel代表视图模型，负责监听Model中数据的改变并且控制视图的更新，处理用户交互操作；
 
 Model和View并无直接关联，而是通过ViewModel来进行联系的，Model和ViewModel之间有着双向数据绑定的联系。因此当Model中的数据改变时会触发View层的刷新，View中由于用户交互操作而改变的数据也会在Model中同步。
 这种模式实现了 Model和View的数据自动同步，因此开发者只需要专注于数据的维护操作即可，而不需要自己操作DOM。
@@ -412,7 +415,7 @@ function deReactiveComputed(vm, key, userDef) { // 定义计算属性的key响�
 }
 ```
 
-- `watch`则是监控值变化的，当值发生变化时调用对应的回调函数，不支持缓存。支持异步监听。
+- `watch`则是监控值变化的，当值发生变化时调用对应的回调函数，支持异步监听。
    - 监听的函数接收两个参数，第一个参数是最新的值，第二个是变化之前的值 
       - 函数有两个的配置对象： 
          - immediate：组件加载立即触发回调函数
@@ -546,18 +549,26 @@ export class Watcher {
 // dep.depend() => 通知dep存放watcher  Dep.target.addDep () => 通知watcher存放dep
 ```
 
+#### computed和method区别
+  - 计算属性只有依赖的数据发生变化才会重新计算
+  - method调用函数总会执行
 #### 插槽slot
 
 - slot又名插槽，插槽slot是子组件的一个模板标签元素，这个标签元素是否显示，以及怎么显示是由父组件决定的。slot又分三类，匿名插槽，具名插槽和作用域插槽。 
-   - 匿名插槽：当slot没有指定name属性，默认插槽(default)，一个组件内只有有一个匿名插槽。在父组件进行
+   - 匿名插槽：当slot没有指定name属性，默认插槽(default)，一个组件内只有有一个匿名插槽。
    - 具名插槽：带有具体名字的插槽，也就是带有name属性的slot，一个组件可以出现多个具名插槽。
-   - 在父组件渲染完毕后子组件进行替换操作
+     - 在父组件渲染完毕后子组件进行替换操作
    - 作用域插槽：该插槽的不同点是在子组件渲染作用域插槽时，可以将子组件内部的数据传递给父组件，让父组件根据子组件的传递过来的数据决定如何渲染该插槽。
-   - 在子组件中渲染父组件中插槽标签内容
+     - 在子组件中渲染父组件中插槽标签内容
+
+#### mixin和mixins有哪些区别
+
+- `mixins`是局部混入，如果多个组件中有相同的业务逻辑，就可以把这个业务逻辑剥离出来，通过`mixins`混入代码。
+- 另外`mixins`混入的钩子函数会高于组件的钩子函数执行。遇到同名属性会采用就近原则，以组件中的数据为基准
 
 #### Vue.mixin的使用场景和原理
 
-- `Vue.mixin`的作用就是抽离公共的业务逻辑，原理类似"对象的原型"继承，当组件初始化时会调用`mergeOptions`方法进行合并，采用策略模式针对不同的属性进行合并，生命周期钩子函数也是此时维护成数组形式。如果混入的数据和本身组件中的数据冲突，会采用“就近原则”以组件的数据为基准
+- `Vue.mixin`的作用全局混入，给每个组件实例混入公共的业务逻辑，会影响到每个组件实例，通常插件是这样做初始化的（vuex vueRouter）。当组件初始化时会调用`mergeOptions`方法进行合并，采用策略模式针对不同的属性进行合并，生命周期钩子函数也是此时维护成数组形式。如果混入的数据和本身组件中的数据冲突，会采用“就近原则”以组件的数据为基准
 - `mixin`中有很多缺陷“命名冲突问题”、“依赖问题”、“数据来源问题”
 
 ```javascript
@@ -615,12 +626,13 @@ export function mergeOptions(parent, child) {
 }
 ```
 
+
 #### Vue组件中data为什么必须是函数？
 
-- Vue组件可能存在多个实例，如果使用对象形式定义data，复用组件时会导致它们共用一个data对象，那么状态变更将会影响所有组件实例。
+- Vue组件可能存在多个实例，如果使用对象形式定义data，复用组件时会导致它们共用一个data对象，如果某个组件中data发生改变，那么状态变更将会影响所有组件实例。
 #### 过滤器的作用及实现
 
-- 作用：过滤器是用来过滤数据的，在Vue中配置选项中声明`filters`实现一个过滤器，`filters`不会修改数据，而是过滤数据，改变用户看到的输出。（计算属性computed是根据已有的数据产生新数据，method是通过修改原来的数据进行输出显示）
+- 作用：过滤器是用来过滤数据的，改变用户看到的输出。在Vue配置选项中`filters`声明实现一个过滤器，`filters`不会修改数据，而是过滤数据，（计算属性computed是根据已有的数据产生新数据，method是通过修改原来的数据进行输出显示）
 - 实现：在组件配置对象`filters`定义局部过滤器，过滤器是一个函数，他会把表达式中的值始终作为函数的第一个参数。过滤器用在插值表达式`{{}}`和`v-bind`表达式中，然后放在操作符“`|`”后面进行指示
 - 例如：在显示金额，给商品价格添加单位
 #### v-if和v-for那个优先级会更高
@@ -634,7 +646,7 @@ export function mergeOptions(parent, child) {
 - v-if用于切换频率较少的时候(消耗性能高)，v-show适合频繁切换（消耗性能低）
 
 #### v-model的实现原理
-
+- 是Vue的一个内置指令，可以将数据动态绑定到视图上，同时视图中变化能改变该值。
 - 作用在表单元素上 
    - 动态绑定表单元素的 `value`指向了 `messgae`变量，并且在触发 `input`事件的时候去动态把 `message`设置为目标值：
 - 作用在组件上 
@@ -643,8 +655,8 @@ export function mergeOptions(parent, child) {
 #### nextTick在哪里使用？原理是？
 
 - `nextTick`中的接收一个回调函数作为参数，它的作用将回调函数延迟到下次DOM更新之后执行。将回调函数放入异步队列中。Vue会根据当前浏览器环境优先使用原生的Promise.then、mutationObserver等,刷新异步队列
-   - 数据更新后可用于拿取更新后的`Dom`
-   - 在`created`生命周期钩子函数中需要操作`dom`,也可以把操作写在`nextTick`的回调中
+   - Vue中数据更新页面不会同步进行更新，是异步进行更新，使用nextTick可以拿取更新后的`Dom`
+   - Vue中created生命周期中无法操作dom，可以把操作写在`nextTick`的回调中
 - 原理是：`Vue` 的 `nextTick` 其本质是对 `JavaScript` 执行原理 `EventLoop` 的一种应用，将传入的回调函数包装成微任务加入到Vue异步队列中，保证在异步更新DOM的watcher后面执行。
 
 ```javascript
@@ -727,16 +739,15 @@ export function queueWatcher(watcher) {
 
 - 子组件不可以直接改变父组件的数据。这样做主要是为了维护父子组件的单向数据流。每次父级组件发生更新时，子组件中所有的 prop 都将会刷新为最新的值 
    - **可以通过 **`**$emit**`** 派发一个自定义事件，父组件接收到后，由父组件修改。**
-   - **如果父组件通过provide将数据注入给子组件，子组件也可以通过inject来去修改父组件的值**
-#### 单向数据流
-  - 所有的prop都是都使得父子prop之间形成了一个单向下行绑定：父级prop的更新会向下流动到子组件中，但是反过来不行。这样防止从子组件意外改变父级组件的状态，导致数据的混乱。
+#### 单向数据流 
+  - 父级props的更新会流向到子组件，但反过来不行，这样防止意外改变父组件状态，使得应用的数据流难以理解，导致数据的混乱
   - 每次父级组件发生更新时，子组件中所有prop都会刷新为最新值。如果子组件中修改父组件传递过来的属性，控制台会发出警告
   - 子组件想修改父级组件中的属性，可以通过父组件给子组件注册监听的函数，子组件$emit触发监听函数修改父级组件中的属性
 #### Vue.set方法如何实现的
 
 - 我们给对象和数组本身都增加了`dep`属性
 - 当给对象新增不存在的属性 
-   - 首先判断`key`是否本身对象中的属性，如果是直接进行赋值
+   - 首先判断`key`是否属于对象本身中的属性，如果是直接进行赋值
    - 之后判断当前对象是否有`_ob_`属性，判断是不是响应式数据
    - 如果是响应式数据，调用`defineReactive`对新增的属性进行响应式处理，之后通过`_ob_`通知页面更新
 - 当修改数组索引时会调用数组本身的`splice`方法更新数组 
@@ -820,11 +831,6 @@ export function set(
 对于运行时来说，只要保证组件存在`render`函数即可，则有了预编译之后，只需要保证构建过程中生成`render`函数就可以，在`webpack`中，使用`vue-loader`编译`.vue`文件，内部依赖的`vue-template-compiler`模块，在`webpack`构建过程中，将`template`预编译`render`函数。与`react`类似，在添加了`jsx`的语法糖解析器`babel-plugin-transform-vue-jsx`之后，就可以直接手写`render`函数
 所以，`template`和`jsx`的都是`render`的一种表现形式，不同的是：`JSX`相对与`template`而言有更高的灵活性，在复杂的组件中，更具有优势，而`template`虽然显得呆滞，但是`template`在代码结构上更符合与逻辑分离的习惯，更简单、更直观、更好维护
 
-#### mixin和mixins有哪些区别
-
-- `mixin`是全局混入，会影响到每个组件实例，通常插件是这样做初始化的（vuex vueRouter）
-- `mixins`是局部混入，如果多个组件中有相同的业务逻辑，就可以把这个业务逻辑剥离出来，通过`mixins`混入代码。
-- 另外`mixins`混入的钩子函数会高于组件的钩子函数执行。遇到同名属性会采用就近原则，以组件中的数据为基准
 
 #### 常用的Vue性能优化方法
   - 数据层级不易过深，合理设置响应式数据
@@ -839,7 +845,7 @@ export function set(
     console.log(x) // 取了一次值
   }
   ```
-  - 合理设置key属性
+  - 合理设置key
   - v-show和vif的合理使用
   - 控制组件粒度（Vue采用组件级更新）
   - 采用函数式组件（函数组件性能消耗低）
@@ -848,7 +854,7 @@ export function set(
 #### .use的实现原理
 
 - `Vue.use`方法是用来使用插件的，我们可以在插件中扩展全局的组件，指令，原型上的方法，
-- 会调用插件的install方法，将Vue 的构造函数传入进去，方便插件使用，统一Vue 版本
+- 会调用插件的install方法，将Vue 作为参数传入进去，方便插件使用，统一Vue 版本
 #### 常见的.修饰符
 
 - `.stop`：等同于 JavaScript 中的 `event.stopPropagation()` ，防止事件冒泡；
@@ -858,13 +864,13 @@ export function set(
 #### Vue组件之间传值的方式和之前的区别
 
 1. 父子组件间的通信 
-   1. 子组件通过props属性接收父组件传递的数据。父组件在子组件标签注册监听事件，子组件通过$emit触发事件来向父组件发送数据
+   1. 子组件通过props属性接收父组件传递的数据。父组件给子组件注册监听事件，子组件通过$emit触发事件来向父组件发送数据
    1. 通过ref给子组件设置一个名字，父组件通过$refs组件名获取子组件，拿取数据。
-   1. 组件可以通过$parent和$children获取当前组件的父子组件也能拿到数据
+   1. 组件可以通过$parent和$children获取当前组件的父子组件中得数据
 2. 兄弟组件通信 
    1. 使用eventBus的方法。本质是通过创建一个空的Vue实例作为消息传递的对象，通信的组件引入这个实例，在这个实例上监听和触发事件，来实现通信
    1. 通过$parent/$refs获取到兄弟组件进行通信
-3. 任意组件 
+3. 任意组件  
    1. 使用eventBus。事件总线通过$on $emit $once $off
 4. 隔代组件
    1. $attrs和$listeners
@@ -875,11 +881,9 @@ export function set(
 如果是同步更新渲染，多次对一个或者多个属性赋值，会频繁触发`dom`更新新，浪费性能
 同时因为引入了虚拟`dom`，当属性发生变化，属性的关联的`dep`属性通知页面进行更新，页面更新时会调用`render`函数，生成新的虚拟`dom`，再由新老虚拟`dom`差异比对进行更新。如果是同步更新，频繁更新属性都会执行以上操作，浪费性能
 
-### 生命周期
-
 #### Vue中生命周期钩子如何实现
 
-- Vue的生命周期钩子就是回调函数而已，当创建组件实例的过程中会调用对应额钩子方法
+- Vue的生命周期钩子就是回调函数而已，当创建组件实例的过程中会调用对应的钩子方法
 - 内部会对钩子函数进行处理，将钩子函数维护成数组的形式
 
 ```javascript
@@ -970,12 +974,12 @@ export function mergeOptions(parent, child) {
 
 Vue实例有一个完整生命周期，也就是从开始创建、初始化数据、编译模板、挂载`dom`、渲染、更新->渲染、卸载等一系列过程，这就是Vue的生命周期
 
-1. beforeCreate(创建前)：数据观测和初始化事件还未开始，不能通过`this`访问组件上的属性
-2. created（创建后）：实例创建完成，可以通过`this`访问的data、watch、computed、methods的属性，但此时渲染节点还未挂载到`dom`，不能拿取dom。
-3. beforeMount（挂载前）：在挂载开始之前被调用，相关的 render函数首次被调用，生成真实dom，但还没挂载到html页面上
-4. mounted（挂载后）在el被新创建的vm.$el替换，并挂载到实例上去之后被调用。这一阶段可以操作dom
-5. beforeUpdate（更新前）：数据更新，此时页面中数据还是旧的，data中的数据是更新后的。
-6. updated（更新后）：页面显示的数据和data中的数据已经保持同步，都是最新的
+1. beforeCreate(创建前)：Vue实例创建前调用，数据观测和初始化事件还未开始，不能通过`this`访问组件上的属性
+2. created（创建后）：实例创建后调用，可以通过`this`访问的data、computed、methods的属性
+3. beforeMount（挂载前）页面挂载前调用，相关的 render函数首次被调用，生成真实dom，但还没挂载到页面上
+4. mounted（挂载后）页面挂载后调用，el被新创建的vm.$el替换，并挂载到实例上。这一阶段可以操作dom
+5. beforeUpdate（更新前）：页面更新前调用，此时页面中数据还是旧的，但是data中的数据是更新后的。
+6. updated（更新后）：页面更新后调用，页面显示的数据和data中的数据已经保持同步，都是最新的
 7. beforeDestory（销毁前）：实例销毁前调用，这一步仍然可以通过`this`访问到实例上的属性，可以做一些解绑自定义事件、清除定时器等
 8. destoryed（销毁后）：实例销毁后调用。
 
@@ -1001,35 +1005,30 @@ Vue实例有一个完整生命周期，也就是从开始创建、初始化数�
    4. 父组件 destroyed
 #### 一般在哪个生命周期请求异步数据
 
-- 在created、beforeMount、mounted中进行调用，因为在这三个钩子函数中，组件中的数据初始化完毕，可以将服务端返回的数据进行赋值
-- 一般还是在created和mounted中发送请求（更快的获取服务端数据），created中无法拿到dom节点，mounted可以拿到真实的dom节点，根据业务的实际情况进行选择。
+- 在created beforeMount mounted 中这三个钩子函数中调用异步请求，因为这三个钩子函数中 data中得数据已经初始化完毕，可以将服务端返回得数据进行赋值。
+- mounted中可以操作dom节点，其他两个不可以，需要根据具体的业务场景选择钩子函数发送请求
 
 #### keep-alive
 
 - `keep-alive`是vue提供的一个内置组件，用来对组件进行缓存，在组件切换过程中将状态保留到内存中，防止重复渲染dom
 - 如果一个组件包裹`keep-alive`，那么他会多出两个生命周期，`deactivated`和`activated`。同时`beforeDestroy`和`destroyed`不会再被触发。因为组件没有真正的销毁
+- 有两个属性 include 和exclude
+  - include 字符串或者正则 只有组件名称匹配到的组件才会被缓存
+  - exclude 字符串或者正则 只有组件名称不匹配的组件才会被缓存
 
 ### 虚拟dom
 
 #### 虚拟dom的理解
 
-- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。数据发生变化,页面更新时会使用新创建的虚拟dom和将上一次渲染时缓存的虚拟dom进行对比，然后根据diff算法比对差异只更新需要更新的真实DOM节点，从而避免不必要的 DOM 操作，节省一定的性能。
-- 虚拟dom不依赖平台的真实环境实现跨平台
-
-#### Vue为什么需要虚拟dom
-
-- 操作真实dom性能消耗高，操作对象性能消耗低，操作真实dom转化为操作js对象，再进过diff算法比对差异进行更新（减少对真实dom的操作保证性能的下限）
-- 虚拟dom不依赖平台的真实环境实现跨平台
+- 虚拟dom就是用js对象来描述真实的dom节点，是对真实dom的抽象。Vue的核心是数据驱动视图，当数据发生变化，视图进行更新，在更新视图的时候要操作真实dom，而操作真实dom会非常消耗性能。所以操作真实dom转变为操作js对象，即视图更新时调用render函数生成新的虚拟dom，由新老虚拟dom通过diff算法进行差异比对，只更新需要更新的真实dom节点，节省一定的性能
+  - 虚拟dom不依赖平台的真实环境实现跨平台 
+  - 保证性能的下限
+  - 无需手动操作dom，不需要手动操作dom，只要写好viewmodel的代码逻辑，框架会根据虚拟dom和数据双向绑定，生成真实的dom进行渲染
 
 #### Vue中diff算法原理
-
-在新老虚拟`dom`对比时
-
-1. 先比较是否是相同节点，如果不是相同节点，通过旧虚拟节点和新虚拟节点对比属性名和key是否相同，
-
-如果不相同，通过旧虚拟节点的真实节点拿到父节点，直接替换子节点
-
-2. 如果相同节点对比属性，并复用老节点，之后判断一方有子节点和没有子节点的情况（如果新虚拟dom没有子节点会删除旧节点的子节点，如果新虚拟`dom`有子节点旧子节点没有，将新虚拟dom的子节点插入旧节点的孩子节点是哪个）
+diff算法只会发生在视图更新阶段，也就是当数据发生变化时，执行render函数生成新的虚拟dom再和旧的虚拟dom做对比
+1. 首先对比节点本身，通过旧虚拟dom和新虚拟dom属性名和key判断是否相同，如果不相同，通过旧虚拟dom拿到真实节点的父节点，直接替换子节点
+2. 如果相同节点对比属性，并复用老节点，之后判断一方有子节点和没有子节点的情况（如果新虚拟dom没有子节点会删除旧节点的子节点，如果新虚拟`dom`有子节点旧子节点没有，将新虚拟dom的子节点插入旧节点的孩子节点）
 3. 如果都有儿子节点，对比儿子节点（diff算法核心），儿子节点平级比较，不考虑跨级比较的情况。内部采用深度递归+双指针的方式进行比较
 4. 优化比较：头头、尾尾、头尾、尾头
 5. 暴力比对，查找进行复用
@@ -1233,15 +1232,16 @@ function patchChildren(parent, newChildren, oldChildren) {
 
 #### Vue中key的作用和原理？
 
-- `Vue`在`patch`过程中（新老虚拟dom对比）通过`key`和`tagName`来判断两个虚拟节点是否是相同节点。
+- 在视图更新阶段新老虚拟dom通过`key`和`tagName`来判断两个虚拟节点是否是相同节点。
 - 无key会导致更新时出现问题，只会对比标签名是否相同，如果相同就进行对比更新子节点，达不到复用的效果
-- 尽量不要采用索引作为`key`
+- diff算法比对孩子节点时，如果头头、尾尾、头尾、尾头都匹配不上，会通过新虚拟dom的key暴力比对，去旧虚拟节点的map对象中查找进行复用
+- 尽量不要采用索引作为`key`，使用索引作为key，无论数组怎么变化,key还是0123，就失去了key的作用
 - ![image.png](https://cdn.nlark.com/yuque/0/2022/png/1684797/1657423029273-61fa1d62-450a-42c7-8fce-cd38bda9ecf3.png#clientId=u78438ae1-750f-4&crop=0&crop=0&crop=1&crop=1&from=paste&height=501&id=u4b29a07b&margin=%5Bobject%20Object%5D&name=image.png&originHeight=655&originWidth=827&originalType=binary&ratio=1&rotation=0&showTitle=false&size=169893&status=done&style=none&taskId=u94a1a54e-a36a-4d04-8370-fb78142f812&title=&width=632#crop=0&crop=0&crop=1&crop=1&id=qnBuI&originHeight=655&originWidth=827&originalType=binary&ratio=1&rotation=0&showTitle=false&status=done&style=none&title=)
 
 ### VueRouter
   #### VueRouter的懒加载
 
-  - 普通路由引用: 静态引用（只有打包时引入），使用webpack打包后文件异常大，造成进入首页时，加载内容过多时间长，造成白屏不利于用户体验。
+  - 普通路由引用: 静态引用（只有打包时引入），使用webpack打包后文件异常大，进入首页时，加载内容过多时间长，造成白屏不利于用户体验。
   - 路由组件懒加载:  动态引入（动态加载对应的组件对象） 
     - 在打包时路由组件会被单独打包(代码分割: code split)
     - 默认不请求加载路由组件打包文件，当请求路径对应路由组件时才请求加载(按需加载)
@@ -1277,14 +1277,8 @@ function patchChildren(parent, newChildren, oldChildren) {
   ```
   #### 路由的hash和history模式的区别
 
-  - VueRouter有两种模式：hash模式和history模式。默认的路由模式为hash模式
-  - hash模式 
-    - 简介：hash模式是开发中默认的模式，它的URL带着一个#，例如：http://www.abc.com/#/vue，它的hash值就是#/vue
-    - 发请求的路径：[http://localhost:8080](http://localhost:8080)  访问的项目的根路径
-    - 响应：返回的总是根据路由路径匹配到多个路由组件打包后的index页面，自动引入打包后的js ==> path部分被解析为前台路由路径
-    - 特点：hash值会出现在URL里面，但是不会出现在HTTP请求中，对后端完全没有影响。vue-router插件绑定在原生hashchange的方法，如果hash值发生改变去匹配对应的matched。
-  - history模式 
-    - history模式的URL中没有#，它使用的是传统的路由分发模式，即用户在输入一个URL时，后台服务器会接收这个请求，并解析这个URL，然后做出相应的逻辑处理。如果后台没有正确配置，访问时会返回404。
+  - VueRouter有两种模式：hash模式和history模式。默认的路由模式为hash模式，它的URL带着一个#，即用户输入一个url,hash模式下发请求的路径是访问项目的根路径，返回的总是根据hash值匹配到多个路由组件打包后的index页面，hash值会出现在URL里面，但是不会出现在HTTP请求中，对后端完全没有影响。hash模式是依靠onhashChange事件（监听window.localtion.hash的变化），更新页面。
+  - history模式的URL中没有#，  。即用户在输入一个URL时，后台服务器会接收这个请求，并解析这个URL，然后做出相应的逻辑处理。如果后台没有正确配置，访问时会返回404。history模式的实现主要是依靠Html5 hisory中新增的两个方法，pushState和replaceState这两个API记录了浏览器历史栈，并且当在修改URL时不会触发页面刷新和后台请求。
   #### 如何获取页面hash变化
 
   - 监听$route的变化
@@ -1302,7 +1296,6 @@ function patchChildren(parent, newChildren, oldChildren) {
 
   - window.location.hash读取hash值
   #### $route和$router的区别
-
   - $route是路由信息对象，包括path、name、params、query、hash等路由信息参数
   - $router是路由实例对象包括了路由跳转的方法，钩子函数等
   #### 如何定义动态路由？
@@ -1385,22 +1378,20 @@ function patchChildren(parent, newChildren, oldChildren) {
   #### 路由导航守卫
 ### Vuex
   #### Vuex理解
-  Vuex是一个专为Vue.js应用程序开发的状态管理模式。每个Vuex应用的核心就是store，“store”基本上就是一个容器，它包含着你的应用大部分的状态（state）
-    - Vuex的状态存储是响应式的。当Vue组件从store中读取状态时，若store中状态发生变化，那会对应的组件也会更新
-    - 改变store中的状态唯一途径显示地（commit）mutation，这样可以方便跟踪每个状态的变化
+  - Vuex是一个专为Vue.js应用程序开发的状态管理的插件。每个Vuex应用的核心就是store，“store”基本上就是一个容器，包含应用程序大部分的状态数据（state）
+    - Vuex存储的状态是响应式的。当Vue组件使用到store中的状态，若store中状态发生变化，对应的组件实例也会更新
+    - store中的状态数据无法直接改变，改变store中的状态唯一途径显示地（commit）mutation方法，这样可以方便跟踪每个状态的变化
     - 主要包括以下几个模块
-      - state：Vuex的基本数据，用于存储变量（data中定义的属性）
-      - getter：根据state中已有的数据产生新的数据（计算属性）
-      - mutation：用于直接提交更新state数据方法
-      - action：和mutation功能类似，都是用于提交更新，但action提交的是mutation，而不是直接变更数据，并且action支持异步操作
-      - module：模块化Vuex，每个模块都有自己的state、mutation、action、getter等
-    - 总结：Vuex是一个单向数据流，在全局拥有一个state存放数据，当组件要更改state中的数据时，必须通过mutation提交修改的信息，mutation同时提供了订阅者模式供外部调用更新state中数据。而当所有异步操作必须需要走action,但action也是无法直接修改state的,还是需要通过mutation来修改state的数据。getter是中的数据时根据state中已有的数据产生的新数据（计算属性）
+      - state：Vuex的基本数据，用于存储数据，将数据通过new Vue后转换成响应式数据。
+      - getter：根据state中已有的数据产生新的数据，通过new Vue的computed实现计算属性的特点，只有当它依赖的数据发生变化才会重新计算
+      - mutation：用于直接提交更新state数据的方法，必须是同步执行,方便数据流的追踪，触发mutation，是通过Vuex实例上的commit方法
+      - action：和mutation功能类似，都是用于提交更新，但action提交的是mutation，而不是直接变更数据，支持异步提交，可以提交多个mutation，触发action，是通过Vuex实例上的dispath方法
+      - module：模块化Vuex，每个模块都有自己的state、mutation、action、getter,方便管理
+    - vuex一般用于中大型应用对应用状态进行管理，对于一些组件间关系较为简单的小型应用没必要使用vuex,因为完全可以用组件的prop属性或者事件来完成组件之间的通信，vuex更多用于解决跨级组件通信
   #### Vuex中action和mutation的区别
-    - mutation更专注于修改state中的数据，必须是同步执行。 触发mutation，是通过Vuex实例上的commit方法，接收两个参数(事件类型，参数)
-    - action提交的是mutation，而不是直接更新数据，可以是异步的，可以同时提交多个mutation。触发action，是通过Vuex实例上的dispath方法，接收两个参数（mutation的类型，参数）
-    -mutation的参数是state，包含store中的数据；action的参数是context，他是关于Vuex实例上一些属性或者方法
+    -mutation中函数的参数是state，包含当前模块中store的数据；action中函数的参数是context，包含于Vuex实例上一些属性或者方法
   #### Vuex中state和localStorage的区别
-    - vuex中的state是存储在内存中，页面关闭或刷新数据丢失。localStorage存储在本地，存储时只能存取字符串类型的数据，对于引用数据类型需要通过JSON.stringify转为字符串。读取vuex中数据的速度要比读取localStorage速度要快
+    - vuex中的state数据是存储在内存中，页面关闭或刷新数据丢失。localStorage中的数据存储在本地，存储时只能存取字符串类型的数据，对于引用数据类型需要通过JSON.stringify转为字符串。读取vuex中数据的速度要比读取localStorage速度要快
     - vuex中的数据是响应式的，数据发生变化界面更新，localstorage中更新数据需要刷新
     - vuex应用于组件之间的传值，localStorage主要用于不同界面之间的传递
   #### Vuex和单纯的全局对象有什么区别
@@ -1409,5 +1400,3 @@ function patchChildren(parent, newChildren, oldChildren) {
   #### 为什么Vuex的mutation中不能做异步操作
     - Vuex中所有的状态更新都要依赖commit提交mutation，方便跟踪每个状态的变化
     - 每个mutation执行完成后都会对应一个新的状态变更，这样devTools就可以打个快照保存下来，方便调试跟踪
-
-
